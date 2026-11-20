@@ -8,24 +8,36 @@ import androidx.lifecycle.lifecycleScope
 import com.example.todoapp.data.DatabaseHelper
 import com.example.todoapp.databinding.ActivityLoginBinding
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 
 class LoginActivity : AppCompatActivity() {
     private lateinit var binding: ActivityLoginBinding
     private lateinit var dbHelper: DatabaseHelper
+    private lateinit var preferencesManager: PreferencesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Comprobar si existe sesión previa
-        val prefs = getSharedPreferences("app_session", MODE_PRIVATE)
-        val savedUserId = prefs.getInt("LOGGED_USER_ID", -1)
-        if (savedUserId != -1) {
-            goToMain()
-            return
-        }
+        preferencesManager = PreferencesManager(this)
 
+        // 1. Verificar en DataStore si la sesión sigue iniciada
+        lifecycleScope.launch {
+            val isLoggedIn = preferencesManager.isLoggedInFlow.first()
+            if (isLoggedIn) {
+                goToMain()
+            } else {
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("es"))
+                setupLoginUI()
+            }
+        }
+    }
+
+    private fun setupLoginUI() {
         binding = ActivityLoginBinding.inflate(layoutInflater)
         setContentView(binding.root)
         dbHelper = DatabaseHelper(this)
@@ -41,11 +53,14 @@ class LoginActivity : AppCompatActivity() {
 
             lifecycleScope.launch(Dispatchers.IO) {
                 val userId = dbHelper.loginUser(user, pass)
-                withContext(Dispatchers.Main) {
-                    if (userId != -1) {
-                        prefs.edit().putInt("LOGGED_USER_ID", userId).apply()
+                if (userId != -1) {
+                    // 2. Guardar sesión y userId en DataStore antes de navegar
+                    preferencesManager.saveSession(isLoggedIn = true, userId = userId)
+                    withContext(Dispatchers.Main) {
                         goToMain()
-                    } else {
+                    }
+                } else {
+                    withContext(Dispatchers.Main) {
                         Toast.makeText(this@LoginActivity, "Credenciales incorrectas", Toast.LENGTH_SHORT).show()
                     }
                 }

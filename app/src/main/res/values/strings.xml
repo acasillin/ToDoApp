@@ -1,3 +1,20 @@
 <resources>
-    <string name="app_name">ToDoApp</string>
+    <string name="app_name">Todo List</string>
+    <string name="nav_home">Inicio</string>
+    <string name="nav_tasks">Tareas</string>
+    <string name="nav_settings">Configuración</string>
+    <string name="nav_add_task">Agregar tarea</string>
+    <string name="nav_categories">Categorías</string>
+    <string name="nav_logout">Cerrar sesión</string>
+    <string name="my_tasks">Mis tareas</string>
+    <string name="task_completed_title">¡Tarea Completada Correctamente!</string>
+    <string name="accept">Aceptar</string>
+    <string name="settings_title">Configuración de Preferencias</string>
+    <string name="theme_section">Tema de la aplicación</string>
+    <string name="theme_light">Modo Claro</string>
+    <string name="theme_dark">Modo Oscuro</string>
+    <string name="notifications_section">Notificaciones</string>
+    <string name="notifications_label">Activar notificaciones</string>
+    <string name="language_section">Idioma</string>
+    <string name="reset_button">Restablecer configuración predeterminada</string>
 </resources>

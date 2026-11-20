@@ -3,25 +3,26 @@ package com.example.todoapp.ui
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.example.todoapp.R
 import com.example.todoapp.viewmodel.TaskViewModel
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class CompletedHistoryActivity : AppCompatActivity() {
 
     private lateinit var viewModel: TaskViewModel
     private lateinit var adapter: TaskAdapter
+    private lateinit var preferencesManager: PreferencesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_completed_history)
 
+        preferencesManager = PreferencesManager(this)
         viewModel = ViewModelProvider(this)[TaskViewModel::class.java]
-
-        val prefs = getSharedPreferences("app_session", MODE_PRIVATE)
-        val userId = prefs.getInt("LOGGED_USER_ID", -1)
-        viewModel.activeUserId = userId
 
         val rvCompleted = findViewById<RecyclerView>(R.id.rvCompleted)
 
@@ -43,6 +44,11 @@ class CompletedHistoryActivity : AppCompatActivity() {
             adapter.updateData(list)
         }
 
-        viewModel.loadCompletedTasks()
+        //  DataStore antes de cargar el historial
+        lifecycleScope.launch {
+            val savedUserId = preferencesManager.activeUserIdFlow.first()
+            viewModel.activeUserId = savedUserId
+            viewModel.loadCompletedTasks()
+        }
     }
 }

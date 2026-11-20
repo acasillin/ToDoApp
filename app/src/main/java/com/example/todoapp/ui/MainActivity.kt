@@ -8,43 +8,63 @@ import android.view.LayoutInflater
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.example.todoapp.data.Task
 import com.example.todoapp.databinding.ActivityMainBinding
 import com.example.todoapp.databinding.DialogAddTaskBinding
 import com.example.todoapp.viewmodel.TaskViewModel
+import com.google.android.material.chip.Chip
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var viewModel: TaskViewModel
     private lateinit var adapter: TaskAdapter
+    private lateinit var preferencesManager: PreferencesManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Inicializar ViewModel (Compatibilidad estándar)
+        preferencesManager = PreferencesManager(this)
         viewModel = ViewModelProvider(this)[TaskViewModel::class.java]
 
-        // Obtener usuario en sesión
-        val prefs = getSharedPreferences("app_session", MODE_PRIVATE)
-        val userId = prefs.getInt("LOGGED_USER_ID", -1)
-
-        if (userId == -1) {
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
-            return
-        }
-
-        viewModel.activeUserId = userId
         setupRecyclerView()
+        setupCategoryFilter()
 
         // Observar lista de tareas
         viewModel.activeTasks.observe(this) { taskList ->
             adapter.updateData(taskList)
+        }
+
+        // Cargar sesión, tema e idioma desde DataStore
+        lifecycleScope.launch {
+            val isLoggedIn = preferencesManager.isLoggedInFlow.first()
+            val savedUserId = preferencesManager.activeUserIdFlow.first()
+            val isDark = preferencesManager.isDarkThemeFlow.first()
+            val lang = preferencesManager.languageFlow.first()
+
+            AppCompatDelegate.setDefaultNightMode(
+                if (isDark) AppCompatDelegate.MODE_NIGHT_YES else AppCompatDelegate.MODE_NIGHT_NO
+            )
+            AppCompatDelegate.setApplicationLocales(
+                LocaleListCompat.forLanguageTags(lang)
+            )
+
+            if (!isLoggedIn || savedUserId == -1) {
+                startActivity(Intent(this@MainActivity, LoginActivity::class.java))
+                finish()
+                return@launch
+            }
+
+            viewModel.activeUserId = savedUserId
+            viewModel.loadActiveTasks()
         }
 
         // Búsqueda en tiempo real
@@ -64,13 +84,19 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, CompletedHistoryActivity::class.java))
         }
 
-        binding.btnLogout.setOnClickListener {
-            prefs.edit().clear().apply()
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
+        binding.btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
-        viewModel.loadActiveTasks()
+        binding.btnLogout.setOnClickListener {
+            lifecycleScope.launch {
+                preferencesManager.saveSession(isLoggedIn = false, userId = -1)
+                AppCompatDelegate.setDefaultNightMode(AppCompatDelegate.MODE_NIGHT_NO)
+                AppCompatDelegate.setApplicationLocales(LocaleListCompat.forLanguageTags("es"))
+                startActivity(Intent(this@MainActivity, LoginActivity::class.java))
+                finish()
+            }
+        }
     }
 
     private fun setupRecyclerView() {
@@ -86,6 +112,32 @@ class MainActivity : AppCompatActivity() {
         )
         binding.rvTasks.layoutManager = LinearLayoutManager(this)
         binding.rvTasks.adapter = adapter
+    }
+
+    private fun setupCategoryFilter() {
+        val spinnerAdapter = DialogAddTaskBinding.inflate(layoutInflater).spCategory.adapter
+        val categories = (0 until spinnerAdapter.count).map { index ->
+            spinnerAdapter.getItem(index).toString()
+        }
+        val allOptions = listOf("Todas") + categories
+
+        binding.chipGroupCategories.removeAllViews()
+
+        allOptions.forEachIndexed { index, categoryName ->
+            val chip = Chip(this).apply {
+                text = categoryName
+                isCheckable = true
+                isChecked = (index == 0)
+
+                setOnCheckedChangeListener { _, isChecked ->
+                    if (isChecked) {
+                        viewModel.filterCategory = if (categoryName == "Todas") null else categoryName
+                        viewModel.loadActiveTasks()
+                    }
+                }
+            }
+            binding.chipGroupCategories.addView(chip)
+        }
     }
 
     private fun showAddTaskDialog() {
@@ -113,6 +165,8 @@ class MainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        viewModel.loadActiveTasks()
+        if (viewModel.activeUserId != -1) {
+            viewModel.loadActiveTasks()
+        }
     }
 }
